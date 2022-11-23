@@ -34,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -142,7 +141,7 @@ func (r *BtpOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if !cr.ObjectMeta.DeletionTimestamp.IsZero() && cr.Status.State != types.StateDeleting {
-		return ctrl.Result{}, r.UpdateBtpOperatorState(ctx, cr, types.StateDeleting)
+		return ctrl.Result{}, r.UpdateBtpOperatorStatus(ctx, cr, types.StateDeleting, HardDeleting, "") //TODO what message, why we start deleting here?
 	}
 
 	switch cr.Status.State {
@@ -177,22 +176,19 @@ func (r *BtpOperatorReconciler) HandleRedundantCR(ctx context.Context, oldestCr 
 	logger.Info("Handling redundant BtpOperator CR")
 
 	status := cr.GetStatus()
-	status.Conditions = make([]*metav1.Condition, 0)
-	errorCondition := &metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: 0,
-		LastTransitionTime: metav1.Time{Time: time.Now()},
-		Reason:             "OlderCRExists",
-		Message: fmt.Sprintf("\"%s\" BtpOperator CR in \"%s\" namespace reconciles the operand",
-			oldestCr.GetName(), oldestCr.GetNamespace()),
-	}
-	status.Conditions = append(status.Conditions, errorCondition)
+	redundantCondition := NewConditionByReason(OlderCRExists, fmt.Sprintf("\"%s\" BtpOperator CR in \"%s\" namespace reconciles the operand",
+		oldestCr.GetName(), oldestCr.GetNamespace()))
+	SetStatusCondition(&cr.Status.Conditions, redundantCondition)
 	cr.SetStatus(status.WithState(types.StateError))
 	return r.Status().Update(ctx, cr)
 }
 
-func (r *BtpOperatorReconciler) UpdateBtpOperatorState(ctx context.Context, cr *v1alpha1.BtpOperator, newState types.State) error {
+func (r *BtpOperatorReconciler) UpdateBtpOperatorStatus(ctx context.Context, cr *v1alpha1.BtpOperator, newState types.State, reason string, message string) error {
+	//TODO log transition
+	//TODO handle empty or non-existing reason
+	cr.Status.WithState(newState)
+	newCondition := NewConditionByReason(reason, message)
+	SetStatusCondition(&cr.Status.Conditions, newCondition)
 	cr.SetStatus(cr.Status.WithState(newState))
 	return r.Status().Update(ctx, cr)
 }
@@ -200,7 +196,7 @@ func (r *BtpOperatorReconciler) UpdateBtpOperatorState(ctx context.Context, cr *
 func (r *BtpOperatorReconciler) HandleInitialState(ctx context.Context, cr *v1alpha1.BtpOperator) error {
 	logger := log.FromContext(ctx)
 	logger.Info("Handling Initial state")
-	return r.UpdateBtpOperatorState(ctx, cr, types.StateProcessing)
+	return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, ReconcileSucceeded, "Ready to process")
 }
 
 func (r *BtpOperatorReconciler) HandleProcessingState(ctx context.Context, cr *v1alpha1.BtpOperator) error {
@@ -210,12 +206,12 @@ func (r *BtpOperatorReconciler) HandleProcessingState(ctx context.Context, cr *v
 	secret, err := r.getRequiredSecret(ctx)
 	if err != nil {
 		logger.Error(err, "while getting the required Secret")
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, MissingSecret, "Secret resource not found")
 	}
 
 	if err = r.verifySecret(secret); err != nil {
 		logger.Error(err, "while verifying the required Secret")
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, InvalidSecret, "Secret validation failed")
 	}
 
 	r.addTempLabelsToCr(cr)
@@ -232,10 +228,10 @@ func (r *BtpOperatorReconciler) HandleProcessingState(ctx context.Context, cr *v
 	ready, err := manifest.InstallChart(&logger, installInfo, []types.ObjectTransform{r.labelTransform})
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("error while installing resource %s", client.ObjectKeyFromObject(cr)))
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, ChartInstallFailed, fmt.Sprintf("error while installing resource %s", client.ObjectKeyFromObject(cr)))
 	}
 	if ready {
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateReady)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateReady, Processing, "Charts installed")
 	}
 
 	return nil
@@ -245,7 +241,7 @@ func (r *BtpOperatorReconciler) HandleDeletingState(ctx context.Context, cr *v1a
 	logger := log.FromContext(ctx)
 	if err := r.handleDeprovisioning(ctx); err != nil {
 		logger.Error(err, "deprovisioning failed")
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, HardDeleteFailed, "") //TODO we should differentiate reasons and messages here
 	}
 	logger.Info("deprovisioning success. clearing finalizers for btp manager")
 	cr.SetFinalizers([]string{})
@@ -262,7 +258,7 @@ func (r *BtpOperatorReconciler) HandleDeletingState(ctx context.Context, cr *v1a
 			continue
 		}
 		cr := item
-		if err := r.UpdateBtpOperatorState(ctx, &cr, types.StateProcessing); err != nil {
+		if err := r.UpdateBtpOperatorStatus(ctx, &cr, types.StateProcessing, ReconcileSucceeded, "Ready to process"); err != nil {
 			logger.Error(err, "unable to set \"Processing\" state")
 		}
 	}
@@ -388,7 +384,7 @@ func (r *BtpOperatorReconciler) HandleErrorState(ctx context.Context, cr *v1alph
 	logger := log.FromContext(ctx)
 	logger.Info("Handling Error state")
 
-	return r.UpdateBtpOperatorState(ctx, cr, types.StateProcessing)
+	return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, Recovered, "Recovered from error state")
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -837,12 +833,12 @@ func (r *BtpOperatorReconciler) HandleReadyState(ctx context.Context, cr *v1alph
 	secret, err := r.getRequiredSecret(ctx)
 	if err != nil {
 		logger.Error(err, "while getting the required Secret")
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, MissingSecret, "Secret resource not found")
 	}
 
 	if err = r.verifySecret(secret); err != nil {
 		logger.Error(err, "while verifying the required Secret")
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, InvalidSecret, "Secret validation failed")
 	}
 
 	r.addTempLabelsToCr(cr)
@@ -859,9 +855,9 @@ func (r *BtpOperatorReconciler) HandleReadyState(ctx context.Context, cr *v1alph
 	ready, err := manifest.ConsistencyCheck(&logger, installInfo, []types.ObjectTransform{r.labelTransform})
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("error while checking consistency of resource %s", client.ObjectKeyFromObject(cr)))
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateError)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, ChartInstallFailed, fmt.Sprintf("error while checking consistency of resource %s", client.ObjectKeyFromObject(cr)))
 	} else if !ready {
-		return r.UpdateBtpOperatorState(ctx, cr, types.StateProcessing)
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, Processing, "Consistency checked")
 	}
 
 	return nil
