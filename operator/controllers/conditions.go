@@ -47,15 +47,18 @@ var Reasons = map[string]TypeAndStatus{
 	SoftDeleting:       NotReady,
 }
 
-func NewConditionByReason(reason string, message string) metav1.Condition {
-	typeAndStatus, _ := Reasons[reason] //TODO handle error
-	return metav1.Condition{
-		Status:             typeAndStatus.Status,
-		Reason:             reason,
-		Message:            message,
-		Type:               typeAndStatus.Type,
-		ObservedGeneration: 0, //TODO handle generations
+func NewConditionByReason(reason string, message string) *metav1.Condition {
+	typeAndStatus, found := Reasons[reason]
+	if found {
+		return &metav1.Condition{
+			Status:             typeAndStatus.Status,
+			Reason:             reason,
+			Message:            message,
+			Type:               typeAndStatus.Type,
+			ObservedGeneration: 0, //TODO handle generations
+		}
 	}
+	return nil
 }
 
 func SetStatusCondition(conditions *[]*metav1.Condition, newCondition metav1.Condition) {
