@@ -5,21 +5,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type Reason = string
+
 const (
-	ReconcileSucceeded     = "ReconcileSucceeded"
-	Initialized            = "Initialized"
-	Processing             = "Processing"
-	OlderCRExists          = "OlderCRExists"
-	ChartInstallFailed     = "ChartInstallFailed"
-	ConsistencyCheckFailed = "ConsistencyCheckFailed"
-	MissingSecret          = "MissingSecret"
-	InvalidSecret          = "InvalidSecret"
-	HardDeleting           = "HardDeleting"
-	ResourceRemovalFailed  = "ResourceRemovalFailed"
-	HardDeleteFailed       = "HardDeleteFailed"
-	SoftDeleteFailed       = "SoftDeleteFailed"
-	SoftDeleting           = "SoftDeleting"
-	Recovered              = "Recovered"
+	ReconcileSucceeded     Reason = "ReconcileSucceeded"
+	Initialized            Reason = "Initialized"
+	Processing             Reason = "Processing"
+	OlderCRExists          Reason = "OlderCRExists"
+	ChartInstallFailed     Reason = "ChartInstallFailed"
+	ConsistencyCheckFailed Reason = "ConsistencyCheckFailed"
+	MissingSecret          Reason = "MissingSecret"
+	InvalidSecret          Reason = "InvalidSecret"
+	HardDeleting           Reason = "HardDeleting"
+	ResourceRemovalFailed  Reason = "ResourceRemovalFailed"
+	HardDeleteFailed       Reason = "HardDeleteFailed"
+	SoftDeleteFailed       Reason = "SoftDeleteFailed"
+	SoftDeleting           Reason = "SoftDeleting"
+	Recovered              Reason = "Recovered"
 )
 
 type TypeAndStatus struct {
@@ -37,7 +39,7 @@ var NotReady = TypeAndStatus{
 	Type:   "Ready",
 }
 
-var Reasons = map[string]TypeAndStatus{
+var Reasons = map[Reason]TypeAndStatus{
 	ReconcileSucceeded:     Ready,
 	Initialized:            Ready,
 	Recovered:              Ready,
