@@ -178,7 +178,7 @@ func (r *BtpOperatorReconciler) HandleRedundantCR(ctx context.Context, oldestCr 
 	status := cr.GetStatus()
 	redundantCondition := NewConditionByReason(OlderCRExists, fmt.Sprintf("\"%s\" BtpOperator CR in \"%s\" namespace reconciles the operand",
 		oldestCr.GetName(), oldestCr.GetNamespace()))
-	SetStatusCondition(&cr.Status.Conditions, *redundantCondition)
+	SetStatusCondition(cr.Status.Conditions, *redundantCondition)
 	cr.SetStatus(status.WithState(types.StateError))
 	return r.Status().Update(ctx, cr)
 }
@@ -190,7 +190,7 @@ func (r *BtpOperatorReconciler) UpdateBtpOperatorStatus(ctx context.Context, cr 
 	if newCondition != nil {
 		logger.Info(fmt.Sprintf("\"%s\" BtpOperator CR in \"%s\" namespace changes state to \"%s\" Condition: Type %s Reason %s Message: %s",
 			cr.GetName(), cr.GetNamespace(), newState, newCondition.Type, newCondition.Reason, newCondition.Message))
-		SetStatusCondition(&cr.Status.Conditions, *newCondition)
+		SetStatusCondition(cr.Status.Conditions, *newCondition)
 	} else {
 		logger.Info(fmt.Sprintf("\"%s\" BtpOperator CR in \"%s\" namespace changes state to \"%s\"",
 			cr.GetName(), cr.GetNamespace(), newState))

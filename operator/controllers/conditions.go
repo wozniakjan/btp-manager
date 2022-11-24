@@ -70,18 +70,18 @@ func NewConditionByReason(reason string, message string) *metav1.Condition {
 	return nil
 }
 
-func SetStatusCondition(conditions *[]*metav1.Condition, newCondition metav1.Condition) {
-	conditionsCnt := len(*conditions)
+func SetStatusCondition(conditions []*metav1.Condition, newCondition metav1.Condition) {
+	conditionsCnt := len(conditions)
 	var conditionsArray = make([]metav1.Condition, conditionsCnt, conditionsCnt+1)
 	for i := 0; i < conditionsCnt; i++ {
-		conditionsArray[i] = *(*conditions)[i]
+		conditionsArray[i] = *(conditions)[i]
 	}
 	apimeta.SetStatusCondition(&conditionsArray, newCondition)
 	for i := 0; i < conditionsCnt; i++ {
-		*(*conditions)[i] = conditionsArray[i]
+		*(conditions)[i] = conditionsArray[i]
 	}
 	if len(conditionsArray) > conditionsCnt {
-		*conditions = append(*conditions, &metav1.Condition{})
-		*(*conditions)[conditionsCnt] = conditionsArray[conditionsCnt]
+		conditions = append(conditions, &metav1.Condition{})
+		*(conditions)[conditionsCnt] = conditionsArray[conditionsCnt]
 	}
 }
