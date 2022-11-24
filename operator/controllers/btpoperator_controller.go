@@ -141,7 +141,7 @@ func (r *BtpOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if !cr.ObjectMeta.DeletionTimestamp.IsZero() && cr.Status.State != types.StateDeleting {
-		return ctrl.Result{}, r.UpdateBtpOperatorStatus(ctx, cr, types.StateDeleting, HardDeleting, "") //TODO what message, why we start deleting here?
+		return ctrl.Result{}, r.UpdateBtpOperatorStatus(ctx, cr, types.StateDeleting, HardDeleting, "BtpOperator is to be deleted")
 	}
 
 	switch cr.Status.State {
@@ -202,7 +202,7 @@ func (r *BtpOperatorReconciler) UpdateBtpOperatorStatus(ctx context.Context, cr 
 func (r *BtpOperatorReconciler) HandleInitialState(ctx context.Context, cr *v1alpha1.BtpOperator) error {
 	logger := log.FromContext(ctx)
 	logger.Info("Handling Initial state")
-	return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, ReconcileSucceeded, "Ready to process")
+	return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, Initialized, "Ready to process")
 }
 
 func (r *BtpOperatorReconciler) HandleProcessingState(ctx context.Context, cr *v1alpha1.BtpOperator) error {
@@ -237,7 +237,7 @@ func (r *BtpOperatorReconciler) HandleProcessingState(ctx context.Context, cr *v
 		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, ChartInstallFailed, fmt.Sprintf("error while installing resource %s", client.ObjectKeyFromObject(cr)))
 	}
 	if ready {
-		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateReady, Processing, "Charts installed")
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateReady, ReconcileSucceeded, "Reconcile succeeded")
 	}
 
 	return nil
@@ -245,9 +245,9 @@ func (r *BtpOperatorReconciler) HandleProcessingState(ctx context.Context, cr *v
 
 func (r *BtpOperatorReconciler) HandleDeletingState(ctx context.Context, cr *v1alpha1.BtpOperator) error {
 	logger := log.FromContext(ctx)
-	if err := r.handleDeprovisioning(ctx); err != nil {
+	if err := r.handleDeprovisioning(ctx, cr); err != nil {
 		logger.Error(err, "deprovisioning failed")
-		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, HardDeleteFailed, "") //TODO we should differentiate reasons and messages here
+		return err
 	}
 	logger.Info("deprovisioning success. clearing finalizers for btp manager")
 	cr.SetFinalizers([]string{})
@@ -264,7 +264,7 @@ func (r *BtpOperatorReconciler) HandleDeletingState(ctx context.Context, cr *v1a
 			continue
 		}
 		cr := item
-		if err := r.UpdateBtpOperatorStatus(ctx, &cr, types.StateProcessing, ReconcileSucceeded, "Ready to process"); err != nil {
+		if err := r.UpdateBtpOperatorStatus(ctx, &cr, types.StateProcessing, Processing, "Ready to process"); err != nil {
 			logger.Error(err, "unable to set \"Processing\" state")
 		}
 	}
@@ -482,7 +482,7 @@ func (r *BtpOperatorReconciler) watchBtpOperatorUpdatePredicate() predicate.Func
 	}
 }
 
-func (r *BtpOperatorReconciler) handleDeprovisioning(ctx context.Context) error {
+func (r *BtpOperatorReconciler) handleDeprovisioning(ctx context.Context, cr *v1alpha1.BtpOperator) error {
 	logger := log.FromContext(ctx)
 	logger.Info("Deprovisioning BTP Operator")
 
@@ -504,18 +504,30 @@ func (r *BtpOperatorReconciler) handleDeprovisioning(ctx context.Context) error 
 			logger.Info("hard delete success")
 			if err := r.cleanUpAllBtpOperatorResources(ctx, namespaces); err != nil {
 				logger.Error(err, "failed to remove related installed resources")
-				return err
+				return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, ResourceRemovalFailed, "Unable to remove installed resources")
 			}
 		} else {
-			if err := r.handleSoftDelete(ctx, namespaces); err != nil {
+			err := r.UpdateBtpOperatorStatus(ctx, cr, types.StateDeleting, SoftDeleting, "Being soft deleted")
+			if err != nil {
+				logger.Error(err, "failed tp update status")
 				return err
+			}
+			if err := r.handleSoftDelete(ctx, namespaces); err != nil {
+				logger.Error(err, "failed to hard delete")
+				return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, HardDeleteFailed, "Hard deleting failed")
 			}
 		}
 	case <-time.After(r.timeout):
 		logger.Info("timeout of hard delete", "duration", r.timeout)
 		timeoutChannel <- true
-		if err := r.handleSoftDelete(ctx, namespaces); err != nil {
+		err := r.UpdateBtpOperatorStatus(ctx, cr, types.StateDeleting, SoftDeleting, "Being soft deleted")
+		if err != nil {
+			logger.Error(err, "failed tp update status")
 			return err
+		}
+		if err := r.handleSoftDelete(ctx, namespaces); err != nil {
+			logger.Error(err, "failed to soft delete")
+			return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, SoftDeleteFailed, "Soft deleting failed")
 		}
 	}
 
@@ -861,9 +873,9 @@ func (r *BtpOperatorReconciler) HandleReadyState(ctx context.Context, cr *v1alph
 	ready, err := manifest.ConsistencyCheck(&logger, installInfo, []types.ObjectTransform{r.labelTransform})
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("error while checking consistency of resource %s", client.ObjectKeyFromObject(cr)))
-		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, ChartInstallFailed, fmt.Sprintf("error while checking consistency of resource %s", client.ObjectKeyFromObject(cr)))
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateError, ConsistencyCheckFailed, fmt.Sprintf("error while checking consistency of resource %s", client.ObjectKeyFromObject(cr)))
 	} else if !ready {
-		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, Processing, "Consistency checked")
+		return r.UpdateBtpOperatorStatus(ctx, cr, types.StateProcessing, Initialized, "Consistency checked")
 	}
 
 	return nil

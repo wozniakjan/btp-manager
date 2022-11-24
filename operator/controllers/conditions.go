@@ -1,21 +1,26 @@
 package controllers
 
 import (
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	ReconcileSucceeded = "ReconcileSucceeded"
-	Processing         = "Processing"
-	OlderCRExists      = "OlderCRExists"
-	ChartInstallFailed = "ChartInstallFailed"
-	MissingSecret      = "MissingSecret"
-	InvalidSecret      = "InvalidSecret"
-	HardDeleting       = "HardDeleting"
-	HardDeleteFailed   = "HardDeleteFailed"
-	SoftDeleteFailed   = "SoftDeleteFailed"
-	SoftDeleting       = "SoftDeleting"
-	Recovered          = "Recovered"
+	ReconcileSucceeded     = "ReconcileSucceeded"
+	Initialized            = "Initialized"
+	Processing             = "Processing"
+	OlderCRExists          = "OlderCRExists"
+	ChartInstallFailed     = "ChartInstallFailed"
+	ConsistencyCheckFailed = "ConsistencyCheckFailed"
+	MissingSecret          = "MissingSecret"
+	InvalidSecret          = "InvalidSecret"
+	HardDeleting           = "HardDeleting"
+	DeprovisioningFailed   = "DeprovisioningFailed"
+	ResourceRemovalFailed  = "ResourceRemovalFailed"
+	HardDeleteFailed       = "HardDeleteFailed"
+	SoftDeleteFailed       = "SoftDeleteFailed"
+	SoftDeleting           = "SoftDeleting"
+	Recovered              = "Recovered"
 )
 
 type TypeAndStatus struct {
@@ -34,17 +39,21 @@ var NotReady = TypeAndStatus{
 }
 
 var Reasons = map[string]TypeAndStatus{
-	ReconcileSucceeded: Ready,
-	Recovered:          Ready,
-	ChartInstallFailed: NotReady,
-	Processing:         NotReady,
-	OlderCRExists:      NotReady,
-	MissingSecret:      NotReady,
-	InvalidSecret:      NotReady,
-	HardDeleting:       NotReady,
-	HardDeleteFailed:   NotReady,
-	SoftDeleteFailed:   NotReady,
-	SoftDeleting:       NotReady,
+	ReconcileSucceeded:     Ready,
+	Initialized:            Ready,
+	Recovered:              Ready,
+	ChartInstallFailed:     NotReady,
+	ConsistencyCheckFailed: NotReady,
+	Processing:             NotReady,
+	OlderCRExists:          NotReady,
+	MissingSecret:          NotReady,
+	InvalidSecret:          NotReady,
+	HardDeleting:           NotReady,
+	DeprovisioningFailed:   NotReady,
+	ResourceRemovalFailed:  NotReady,
+	HardDeleteFailed:       NotReady,
+	SoftDeleteFailed:       NotReady,
+	SoftDeleting:           NotReady,
 }
 
 func NewConditionByReason(reason string, message string) *metav1.Condition {
@@ -55,12 +64,24 @@ func NewConditionByReason(reason string, message string) *metav1.Condition {
 			Reason:             reason,
 			Message:            message,
 			Type:               typeAndStatus.Type,
-			ObservedGeneration: 0, //TODO handle generations
+			ObservedGeneration: 0,
 		}
 	}
 	return nil
 }
 
 func SetStatusCondition(conditions *[]*metav1.Condition, newCondition metav1.Condition) {
-	//TODO add logic, to be discussed with MS and LJ
+	conditionsCnt := len(*conditions)
+	var conditionsArray = make([]metav1.Condition, conditionsCnt, conditionsCnt)
+	for i := 0; i < conditionsCnt; i++ {
+		conditionsArray[i] = *(*conditions)[i]
+	}
+	apimeta.SetStatusCondition(&conditionsArray, newCondition)
+	for i := 0; i < conditionsCnt; i++ {
+		*(*conditions)[i] = conditionsArray[i]
+	}
+	if len(conditionsArray) > conditionsCnt {
+		*conditions = append(*conditions, &metav1.Condition{})
+		*(*conditions)[conditionsCnt] = conditionsArray[conditionsCnt]
+	}
 }
