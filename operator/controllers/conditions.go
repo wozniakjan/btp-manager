@@ -15,7 +15,6 @@ const (
 	MissingSecret          = "MissingSecret"
 	InvalidSecret          = "InvalidSecret"
 	HardDeleting           = "HardDeleting"
-	DeprovisioningFailed   = "DeprovisioningFailed"
 	ResourceRemovalFailed  = "ResourceRemovalFailed"
 	HardDeleteFailed       = "HardDeleteFailed"
 	SoftDeleteFailed       = "SoftDeleteFailed"
@@ -49,7 +48,6 @@ var Reasons = map[string]TypeAndStatus{
 	MissingSecret:          NotReady,
 	InvalidSecret:          NotReady,
 	HardDeleting:           NotReady,
-	DeprovisioningFailed:   NotReady,
 	ResourceRemovalFailed:  NotReady,
 	HardDeleteFailed:       NotReady,
 	SoftDeleteFailed:       NotReady,
