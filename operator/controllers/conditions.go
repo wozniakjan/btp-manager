@@ -56,7 +56,7 @@ var Reasons = map[Reason]TypeAndStatus{
 	SoftDeleting:           NotReady,
 }
 
-func NewConditionByReason(reason string, message string) *metav1.Condition {
+func NewConditionForReason(reason string, message string) *metav1.Condition {
 	typeAndStatus, found := Reasons[reason]
 	if found {
 		return &metav1.Condition{
@@ -70,13 +70,17 @@ func NewConditionByReason(reason string, message string) *metav1.Condition {
 	return nil
 }
 
+// This is required because of difference between Conditions declarations
+// In BtpOperator we have Status.Conditions []*Condition instead of Status.Conditions []Condition
 func SetStatusCondition(conditions *[]*metav1.Condition, newCondition metav1.Condition) {
 	conditionsCnt := len(*conditions)
 	var conditionsArray = make([]metav1.Condition, conditionsCnt, conditionsCnt+1)
 	for i := 0; i < conditionsCnt; i++ {
 		conditionsArray[i] = *(*conditions)[i]
 	}
+
 	apimeta.SetStatusCondition(&conditionsArray, newCondition)
+
 	for i := 0; i < conditionsCnt; i++ {
 		(*conditions)[i] = &conditionsArray[i]
 	}
