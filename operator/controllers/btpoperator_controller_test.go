@@ -101,6 +101,10 @@ var _ = Describe("BTP Operator controller", func() {
 				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: btpOperatorName}, cr)).To(Succeed())
 				Expect(cr.GetStatus().State).To(Equal(types.StateError))
+				Expect(len(cr.GetStatus().Conditions)).To(Equal(1))
+				Expect(cr.GetStatus().Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+				Expect(cr.GetStatus().Conditions[0].Type).To(Equal("Ready"))
+				Expect(cr.GetStatus().Conditions[0].Reason).To(Equal("MissingSecret"))
 			})
 		})
 
@@ -114,6 +118,10 @@ var _ = Describe("BTP Operator controller", func() {
 				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: btpOperatorName}, cr)).To(Succeed())
 				Expect(cr.GetStatus().State).To(Equal(types.StateError))
+				Expect(len(cr.GetStatus().Conditions)).To(Equal(1))
+				Expect(cr.GetStatus().Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+				Expect(cr.GetStatus().Conditions[0].Type).To(Equal("Ready"))
+				Expect(cr.GetStatus().Conditions[0].Reason).To(Equal("InvalidSecret"))
 			})
 		})
 
@@ -125,6 +133,10 @@ var _ = Describe("BTP Operator controller", func() {
 				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: btpOperatorName}, cr)).To(Succeed())
 				Eventually(cr.GetStatus().State, time.Second*30, time.Second*1).Should(Equal(types.StateReady))
+				Expect(len(cr.GetStatus().Conditions)).To(Equal(1))
+				Expect(cr.GetStatus().Conditions[0].Status).To(Equal(metav1.ConditionTrue))
+				Expect(cr.GetStatus().Conditions[0].Type).To(Equal("Ready"))
+				Expect(cr.GetStatus().Conditions[0].Reason).To(Equal("Initialized"))
 			})
 		})
 
