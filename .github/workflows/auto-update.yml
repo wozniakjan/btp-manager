@@ -1,7 +1,7 @@
 name: Auto update chart/resources
 
 env:
-  KYMA_ORG: kyma-project
+  KYMA_ORG: wozniakjan
   SAP_ORG: SAP
   BTP_MANAGER_REPO: btp-manager
   SAP_BTP_SERVICE_OPERATOR_REPO: sap-btp-service-operator
@@ -106,7 +106,7 @@ jobs:
 
         # link the PR from ^^ to gopher project board
         pr_number=$(echo "$pr_link" | awk -F '/' '{print($NF)}')
-        pr_id=$(gh api repos/kyma-project/btp-manager/pulls/"$pr_number" | jq -r '.node_id')
+        pr_id=$(gh api repos/"${KYMA_ORG}"/btp-manager/pulls/"$pr_number" | jq -r '.node_id')
 
         # gopher board node_id 
         project_board_id=PVT_kwDOAlVvc84AEv0v
